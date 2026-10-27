@@ -1,10 +1,11 @@
-
 """Command-line account management for QIFY Virtual Drive."""
 
 from __future__ import annotations
 
 import argparse
 import sys
+from qify_virtual_drive.drive_sync import DriveSyncError, DriveSyncService
+from qify_virtual_drive.file_index import FileIndex
 from pathlib import Path
 
 from qify_virtual_drive.account_database import AccountDatabase
@@ -24,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Manage Google accounts connected to QIFY Virtual Drive.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("sync", help="Sync file metadata for a registered account")
     commands.add_parser("list", help="List locally registered Google accounts")
     commands.add_parser("connect", help="Connect a Google account using OAuth")
     return parser
@@ -32,6 +34,43 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     database = AccountDatabase()
+
+    if args.command == "sync":
+        accounts = database.list_accounts()
+
+        if not accounts:
+            print("No registered accounts. Connect an account first.")
+            return 1
+
+        print("Registered accounts:")
+        for index, account in enumerate(accounts, start=1):
+            print(f"{index}. {account.email} [{account.account_id}]")
+
+        selection = input("Enter the account number to sync: ").strip()
+
+        try:
+            selected_index = int(selection) - 1
+            if not 0 <= selected_index < len(accounts):
+                raise ValueError
+        except ValueError:
+            print("Invalid account selection.", file=sys.stderr)
+            return 1
+
+        account = accounts[selected_index]
+        service = DriveSyncService(
+            database=database,
+            file_index=FileIndex(),
+            token_store=TokenStore(),
+        )
+
+        try:
+            count = service.sync_account(account.account_id)
+        except (DriveSyncError, TokenStoreError) as exc:
+            print(f"Sync failed: {exc}", file=sys.stderr)
+            return 1
+
+        print(f"Indexed {count} file records for {account.email}.")
+        return 0
 
     if args.command == "list":
         accounts = database.list_accounts()
