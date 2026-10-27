@@ -10,7 +10,9 @@ description = "Open-source multi-account Google Drive virtual storage for Window
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "MIT"
-dependencies = []
+dependencies = [
+    "keyring>=25.0",
+]
 
 [project.optional-dependencies]
 dev = [
