@@ -25,6 +25,7 @@ class AccountStatus(str, Enum):
     ERROR = "error"
 
 
+
 @dataclass(frozen=True, slots=True)
 class Account:
     """Non-secret metadata for one connected Google account."""
@@ -32,12 +33,16 @@ class Account:
     account_id: str
     email: str
     status: AccountStatus = AccountStatus.CONNECTED
+    google_subject_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.account_id.strip():
             raise AccountError("account_id cannot be empty")
         if not self.email.strip():
             raise AccountError("email cannot be empty")
+        if self.google_subject_id is not None and not self.google_subject_id.strip():
+            raise AccountError("google_subject_id cannot be blank")
+
 
 
 class AccountRegistry:
