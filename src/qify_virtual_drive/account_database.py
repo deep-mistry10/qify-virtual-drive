@@ -1,4 +1,3 @@
-
 """Persistent, non-secret account metadata for QIFY Virtual Drive."""
 
 from __future__ import annotations
@@ -78,9 +77,7 @@ class AccountDatabase:
     def list_accounts(self) -> list[Account]:
         """Load accounts in a stable order."""
         with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT * FROM accounts ORDER BY rowid"
-            ).fetchall()
+            rows = connection.execute("SELECT * FROM accounts ORDER BY rowid").fetchall()
         return [self._to_account(row) for row in rows]
 
     def get_account(self, account_id: str) -> Account | None:
@@ -100,14 +97,10 @@ class AccountDatabase:
             with self._connect() as connection:
                 connection.execute("BEGIN IMMEDIATE")
 
-                count = connection.execute(
-                    "SELECT COUNT(*) FROM accounts"
-                ).fetchone()[0]
+                count = connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
 
                 if count >= self.max_accounts:
-                    raise AccountError(
-                        f"A maximum of {self.max_accounts} accounts is allowed"
-                    )
+                    raise AccountError(f"A maximum of {self.max_accounts} accounts is allowed")
 
                 connection.execute(
                     """

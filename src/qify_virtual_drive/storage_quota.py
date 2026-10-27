@@ -1,4 +1,3 @@
-
 """Storage quota tracking and automatic upload account selection."""
 
 from __future__ import annotations
@@ -100,9 +99,7 @@ class QuotaStore:
 
     def list_all(self) -> list[StorageQuota]:
         with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT * FROM storage_quotas ORDER BY account_id"
-            ).fetchall()
+            rows = connection.execute("SELECT * FROM storage_quotas ORDER BY account_id").fetchall()
 
         return [
             StorageQuota(
@@ -150,7 +147,5 @@ class UploadAllocator:
 
         # Prefer the account with the most remaining space.
         # Stable account-ID ordering breaks ties deterministically.
-        eligible.sort(
-            key=lambda quota: (-quota.available_bytes, quota.account_id)
-        )
+        eligible.sort(key=lambda quota: (-quota.available_bytes, quota.account_id))
         return eligible[0].account_id

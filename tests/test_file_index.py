@@ -1,4 +1,3 @@
-
 import pytest
 
 from qify_virtual_drive.file_index import FileIndex, IndexedFile
@@ -56,12 +55,8 @@ def test_upsert_updates_metadata_without_changing_owner(tmp_path):
 
 def test_parent_listing_is_scoped_to_account(tmp_path):
     index = FileIndex(tmp_path / "index.sqlite3")
-    index.upsert(
-        IndexedFile("account-1", "file-1", "one.txt", "text/plain", "folder-1")
-    )
-    index.upsert(
-        IndexedFile("account-2", "file-2", "two.txt", "text/plain", "folder-1")
-    )
+    index.upsert(IndexedFile("account-1", "file-1", "one.txt", "text/plain", "folder-1"))
+    index.upsert(IndexedFile("account-2", "file-2", "two.txt", "text/plain", "folder-1"))
 
     results = index.list_files(account_id="account-1", parent_id="folder-1")
 
@@ -71,11 +66,7 @@ def test_parent_listing_is_scoped_to_account(tmp_path):
 
 def test_trashed_files_are_hidden_by_default(tmp_path):
     index = FileIndex(tmp_path / "index.sqlite3")
-    index.upsert(
-        IndexedFile(
-            "account-1", "file-1", "old.txt", "text/plain", trashed=True
-        )
-    )
+    index.upsert(IndexedFile("account-1", "file-1", "old.txt", "text/plain", trashed=True))
 
     assert index.list_files() == []
     assert len(index.list_files(include_trashed=True)) == 1
@@ -85,6 +76,8 @@ def test_negative_file_size_is_rejected(tmp_path):
     index = FileIndex(tmp_path / "index.sqlite3")
 
     with pytest.raises(ValueError, match="negative"):
-        index.upsert(make_file("account-1", "file-1").__class__(
-            "account-1", "file-1", "bad.txt", "text/plain", size_bytes=-1
-        ))
+        index.upsert(
+            make_file("account-1", "file-1").__class__(
+                "account-1", "file-1", "bad.txt", "text/plain", size_bytes=-1
+            )
+        )

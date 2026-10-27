@@ -1,4 +1,3 @@
-
 """Persistent unified index for files owned by connected Google accounts."""
 
 from __future__ import annotations

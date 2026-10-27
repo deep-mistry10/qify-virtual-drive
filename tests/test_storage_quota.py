@@ -1,4 +1,3 @@
-
 import pytest
 
 from qify_virtual_drive.storage_quota import (
@@ -64,9 +63,7 @@ def test_allocator_skips_unknown_quota(tmp_path):
     store = QuotaStore(tmp_path / "quotas.sqlite3")
     store.save(quota("account-2", 1000, 100))
 
-    result = UploadAllocator(store).choose_account(
-        200, ["account-1", "account-2"]
-    )
+    result = UploadAllocator(store).choose_account(200, ["account-1", "account-2"])
 
     assert result == "account-2"
 

@@ -1,4 +1,3 @@
-
 """Read-only Google Drive metadata synchronization."""
 
 from __future__ import annotations
@@ -13,7 +12,6 @@ from qify_virtual_drive.account_database import AccountDatabase
 from qify_virtual_drive.accounts import Account
 from qify_virtual_drive.file_index import FileIndex, IndexedFile
 from qify_virtual_drive.token_store import TokenStore, TokenStoreError
-
 
 DRIVE_SCOPES = [
     "https://www.googleapis.com/auth/drive.metadata.readonly",
@@ -39,16 +37,12 @@ class DriveSyncService:
 
     def _get_credentials(self, account: Account) -> Credentials:
         if not account.google_subject_id:
-            raise DriveSyncError(
-                f"Account {account.email} has no Google identity recorded."
-            )
+            raise DriveSyncError(f"Account {account.email} has no Google identity recorded.")
 
         try:
             token_json = self.token_store.load(account.google_subject_id)
         except TokenStoreError as exc:
-            raise DriveSyncError(
-                f"Could not access credentials for {account.email}."
-            ) from exc
+            raise DriveSyncError(f"Could not access credentials for {account.email}.") from exc
 
         if token_json is None:
             raise DriveSyncError(
@@ -76,9 +70,7 @@ class DriveSyncService:
 
             return credentials
         except (ValueError, TypeError, GoogleAuthError, OSError) as exc:
-            raise DriveSyncError(
-                f"Could not prepare credentials for {account.email}."
-            ) from exc
+            raise DriveSyncError(f"Could not prepare credentials for {account.email}.") from exc
 
     def sync_account(self, account_id: str) -> int:
         """Fetch all accessible file metadata pages for one account.
@@ -125,8 +117,7 @@ class DriveSyncService:
                     mime_type = item.get("mimeType")
 
                     if not all(
-                        isinstance(value, str) and value
-                        for value in (file_id, name, mime_type)
+                        isinstance(value, str) and value for value in (file_id, name, mime_type)
                     ):
                         continue
 

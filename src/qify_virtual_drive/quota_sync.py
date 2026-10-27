@@ -1,9 +1,8 @@
-
 """Fetch real Google Drive storage quota information."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import Request
@@ -14,7 +13,6 @@ from googleapiclient.errors import HttpError
 from qify_virtual_drive.account_database import AccountDatabase
 from qify_virtual_drive.storage_quota import QuotaStore, StorageQuota
 from qify_virtual_drive.token_store import TokenStore, TokenStoreError
-
 
 QUOTA_SCOPES = [
     "https://www.googleapis.com/auth/drive.metadata.readonly",
@@ -45,16 +43,12 @@ class QuotaSyncService:
             raise QuotaSyncError(f"Unknown account ID: {account_id}")
 
         if not account.google_subject_id:
-            raise QuotaSyncError(
-                f"Account {account.email} has no Google identity recorded."
-            )
+            raise QuotaSyncError(f"Account {account.email} has no Google identity recorded.")
 
         try:
             token_json = self.token_store.load(account.google_subject_id)
         except TokenStoreError as exc:
-            raise QuotaSyncError(
-                f"Could not access credentials for {account.email}."
-            ) from exc
+            raise QuotaSyncError(f"Could not access credentials for {account.email}.") from exc
 
         if not token_json:
             raise QuotaSyncError(
@@ -78,8 +72,7 @@ class QuotaSyncService:
 
             if not credentials.valid:
                 raise QuotaSyncError(
-                    f"Credentials for {account.email} are invalid. "
-                    "Reconnect the account."
+                    f"Credentials for {account.email} are invalid. Reconnect the account."
                 )
 
             service = build(
@@ -91,21 +84,14 @@ class QuotaSyncService:
 
             response = (
                 service.about()
-                .get(
-                    fields=(
-                        "storageQuota(limit,usage,usageInDrive,"
-                        "usageInDriveTrash)"
-                    )
-                )
+                .get(fields=("storageQuota(limit,usage,usageInDrive,usageInDriveTrash)"))
                 .execute()
             )
 
         except QuotaSyncError:
             raise
         except (ValueError, TypeError, GoogleAuthError, HttpError, OSError) as exc:
-            raise QuotaSyncError(
-                f"Could not retrieve quota for {account.email}: {exc}"
-            ) from exc
+            raise QuotaSyncError(f"Could not retrieve quota for {account.email}: {exc}") from exc
 
         storage = response.get("storageQuota") or {}
         raw_limit = storage.get("limit")
@@ -133,7 +119,7 @@ class QuotaSyncService:
             account_id=account.account_id,
             total_bytes=total_bytes,
             used_bytes=used_bytes,
-            checked_at=datetime.now(timezone.utc).isoformat(),
+            checked_at=datetime.now(UTC).isoformat(),
         )
 
         self.quota_store.save(quota)

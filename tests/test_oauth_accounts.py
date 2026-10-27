@@ -1,4 +1,3 @@
-
 import json
 
 import pytest
@@ -74,9 +73,7 @@ def identity(number):
 
 
 def test_connect_registers_account_and_token(tmp_path, monkeypatch):
-    service, database, tokens = make_service(
-        tmp_path, monkeypatch, identity(1)
-    )
+    service, database, tokens = make_service(tmp_path, monkeypatch, identity(1))
 
     account = service.connect_account()
 
@@ -85,12 +82,8 @@ def test_connect_registers_account_and_token(tmp_path, monkeypatch):
     assert "google-id-1" in tokens.tokens
 
 
-def test_duplicate_account_is_rejected_without_overwriting_token(
-    tmp_path, monkeypatch
-):
-    service, database, tokens = make_service(
-        tmp_path, monkeypatch, identity(1)
-    )
+def test_duplicate_account_is_rejected_without_overwriting_token(tmp_path, monkeypatch):
+    service, database, tokens = make_service(tmp_path, monkeypatch, identity(1))
     service.connect_account()
     original_token = tokens.tokens["google-id-1"]
 
@@ -102,9 +95,7 @@ def test_duplicate_account_is_rejected_without_overwriting_token(
 
 
 def test_fifth_account_is_rejected(tmp_path, monkeypatch):
-    service, database, tokens = make_service(
-        tmp_path, monkeypatch, identity(5)
-    )
+    service, database, tokens = make_service(tmp_path, monkeypatch, identity(5))
 
     for number in range(1, 5):
         from qify_virtual_drive.accounts import Account

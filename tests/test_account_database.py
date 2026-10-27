@@ -1,8 +1,7 @@
-
 import pytest
 
-from qify_virtual_drive.accounts import Account, AccountError, AccountStatus
 from qify_virtual_drive.account_database import AccountDatabase
+from qify_virtual_drive.accounts import Account, AccountError, AccountStatus
 
 
 def make_account(number: int, subject: str | None = None) -> Account:

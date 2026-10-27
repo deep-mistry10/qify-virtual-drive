@@ -1,9 +1,7 @@
-
 """Google OAuth integration with QIFY's local account registry."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -16,11 +14,10 @@ from qify_virtual_drive.account_database import AccountDatabase
 from qify_virtual_drive.accounts import Account, AccountError
 from qify_virtual_drive.token_store import TokenStore, TokenStoreError
 
-
 SCOPES = [
     "openid",
-    "email",
-    "profile",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/drive.metadata.readonly",
 ]
 
@@ -41,9 +38,7 @@ class OAuthAccountService:
     def connect_account(self) -> Account:
         """Run interactive OAuth and register the authorized Google identity."""
         if not self.credentials_path.is_file():
-            raise FileNotFoundError(
-                f"Desktop OAuth credentials not found: {self.credentials_path}"
-            )
+            raise FileNotFoundError(f"Desktop OAuth credentials not found: {self.credentials_path}")
 
         flow = InstalledAppFlow.from_client_secrets_file(
             str(self.credentials_path),
@@ -94,9 +89,7 @@ class OAuthAccountService:
         # Check capacity after identity is known, so duplicate identities can
         # be recognized even when the registry already contains four accounts.
         if len(self.database.list_accounts()) >= self.database.max_accounts:
-            raise AccountError(
-                f"All {self.database.max_accounts} Google account slots are in use."
-            )
+            raise AccountError(f"All {self.database.max_accounts} Google account slots are in use.")
 
         account = Account(
             account_id=f"google:{subject}",

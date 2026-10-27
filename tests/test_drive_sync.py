@@ -1,4 +1,3 @@
-
 from qify_virtual_drive.account_database import AccountDatabase
 from qify_virtual_drive.accounts import Account
 from qify_virtual_drive.drive_sync import DriveSyncService
@@ -35,30 +34,34 @@ class FakeFiles:
         self.calls.append(kwargs)
 
         if kwargs.get("pageToken") is None:
-            return FakeRequest({
+            return FakeRequest(
+                {
+                    "files": [
+                        {
+                            "id": "file-1",
+                            "name": "report.txt",
+                            "mimeType": "text/plain",
+                            "size": "120",
+                            "parents": ["folder-1"],
+                            "modifiedTime": "2026-10-27T08:00:00Z",
+                        }
+                    ],
+                    "nextPageToken": "page-2",
+                }
+            )
+
+        return FakeRequest(
+            {
                 "files": [
                     {
-                        "id": "file-1",
-                        "name": "report.txt",
-                        "mimeType": "text/plain",
-                        "size": "120",
-                        "parents": ["folder-1"],
-                        "modifiedTime": "2026-10-27T08:00:00Z",
+                        "id": "file-2",
+                        "name": "image.png",
+                        "mimeType": "image/png",
+                        "size": "250",
                     }
-                ],
-                "nextPageToken": "page-2",
-            })
-
-        return FakeRequest({
-            "files": [
-                {
-                    "id": "file-2",
-                    "name": "image.png",
-                    "mimeType": "image/png",
-                    "size": "250",
-                }
-            ]
-        })
+                ]
+            }
+        )
 
 
 class FakeDriveService:
@@ -108,6 +111,7 @@ def test_sync_rejects_unknown_account(tmp_path):
     sync = DriveSyncService(database, index, FakeTokenStore())
 
     import pytest
+
     from qify_virtual_drive.drive_sync import DriveSyncError
 
     with pytest.raises(DriveSyncError, match="Unknown account"):

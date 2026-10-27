@@ -1,4 +1,3 @@
-
 """Local account registry for QIFY Virtual Drive.
 
 This module manages account metadata only. It does not store OAuth tokens
@@ -9,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-
 
 MAX_ACCOUNTS = 4
 
@@ -23,7 +21,6 @@ class AccountStatus(str, Enum):
     NEEDS_REAUTH = "needs_reauth"
     DISCONNECTED = "disconnected"
     ERROR = "error"
-
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +39,6 @@ class Account:
             raise AccountError("email cannot be empty")
         if self.google_subject_id is not None and not self.google_subject_id.strip():
             raise AccountError("google_subject_id cannot be blank")
-
 
 
 class AccountRegistry:
