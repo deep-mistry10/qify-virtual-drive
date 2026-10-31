@@ -138,8 +138,12 @@ class FileIndex:
         parent_id: str | None = None,
         include_trashed: bool = False,
     ) -> list[IndexedFile]:
-        """List indexed files, optionally scoped to one account and parent."""
-        clauses = []
+        """List indexed files, optionally scoped to one account and parent.
+
+        For backwards compatibility, parent_id=None means no parent filter.
+        Use list_children(account_id, None) to list only Drive root entries.
+        """
+        clauses: list[str] = []
         values: list[object] = []
 
         if account_id is not None:
@@ -161,6 +165,43 @@ class FileIndex:
                 SELECT * FROM indexed_files
                 {where}
                 ORDER BY account_id, name COLLATE NOCASE, file_id
+                """,
+                values,
+            ).fetchall()
+
+        return [self._from_row(row) for row in rows]
+
+    def list_children(
+        self,
+        account_id: str,
+        parent_id: str | None,
+        include_trashed: bool = False,
+    ) -> list[IndexedFile]:
+        """List direct children of a Drive folder.
+
+        parent_id=None explicitly means the Google Drive root directory.
+        """
+        if not account_id.strip():
+            raise ValueError("account_id cannot be empty")
+
+        clauses = ["account_id = ?"]
+        values: list[object] = [account_id]
+
+        if parent_id is None:
+            clauses.append("parent_id IS NULL")
+        else:
+            clauses.append("parent_id = ?")
+            values.append(parent_id)
+
+        if not include_trashed:
+            clauses.append("trashed = 0")
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT * FROM indexed_files
+                WHERE {" AND ".join(clauses)}
+                ORDER BY name COLLATE NOCASE, file_id
                 """,
                 values,
             ).fetchall()

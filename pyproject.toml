@@ -12,6 +12,10 @@ requires-python = ">=3.12,<3.13"
 license = "MIT"
 dependencies = [
     "keyring>=25.0",
+    "google-api-python-client>=2.0",
+    "google-auth>=2.0",
+    "google-auth-oauthlib>=1.0",
+    "winfspy>=0.8.4",
 ]
 
 [project.optional-dependencies]

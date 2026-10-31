@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -51,16 +53,13 @@ class DriveSyncService:
 
         try:
             credentials = Credentials.from_authorized_user_info(
-                __import__("json").loads(token_json),
+                json.loads(token_json),
                 scopes=DRIVE_SCOPES,
             )
 
             if credentials.expired and credentials.refresh_token:
                 credentials.refresh(Request())
-                self.token_store.save(
-                    account.google_subject_id,
-                    credentials.to_json(),
-                )
+                self.token_store.save(account.google_subject_id, credentials.to_json())
 
             if not credentials.valid:
                 raise DriveSyncError(
@@ -72,85 +71,106 @@ class DriveSyncService:
         except (ValueError, TypeError, GoogleAuthError, OSError) as exc:
             raise DriveSyncError(f"Could not prepare credentials for {account.email}.") from exc
 
-    def sync_account(self, account_id: str) -> int:
-        """Fetch all accessible file metadata pages for one account.
+    def _build_service(self, account: Account):
+        credentials = self._get_credentials(account)
+        return build(
+            "drive",
+            "v3",
+            credentials=credentials,
+            cache_discovery=False,
+        )
 
-        Returns the number of indexed file records processed.
-        """
+    @staticmethod
+    def _make_indexed_file(
+        account: Account, item: dict, *, root_parent: bool = False
+    ) -> IndexedFile | None:
+        file_id = item.get("id")
+        name = item.get("name")
+        mime_type = item.get("mimeType")
+
+        if not all(isinstance(value, str) and value for value in (file_id, name, mime_type)):
+            return None
+
+        raw_size = item.get("size")
+        try:
+            size_bytes = int(raw_size) if raw_size is not None else None
+        except (TypeError, ValueError):
+            size_bytes = None
+
+        parents = item.get("parents") or []
+        parent_id = None if root_parent else (parents[0] if parents else None)
+
+        return IndexedFile(
+            account_id=account.account_id,
+            file_id=file_id,
+            name=name,
+            mime_type=mime_type,
+            parent_id=parent_id,
+            size_bytes=size_bytes,
+            modified_time=item.get("modifiedTime"),
+            trashed=bool(item.get("trashed", False)),
+        )
+
+    def _sync_query(self, account: Account, query: str | None, *, root_parent: bool = False) -> int:
+        service = self._build_service(account)
+        page_token = None
+        processed = 0
+
+        while True:
+            response = (
+                service.files()
+                .list(
+                    q=query,
+                    pageSize=1000,
+                    pageToken=page_token,
+                    orderBy="name",
+                    fields=(
+                        "nextPageToken,files(id,name,mimeType,size,modifiedTime,parents,trashed)"
+                    ),
+                    includeItemsFromAllDrives=True,
+                    supportsAllDrives=True,
+                )
+                .execute()
+            )
+
+            for item in response.get("files", []):
+                indexed = self._make_indexed_file(account, item, root_parent=root_parent)
+                if indexed is not None:
+                    self.file_index.upsert(indexed)
+                    processed += 1
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                return processed
+
+    def sync_folder(self, account_id: str, parent_id: str | None) -> int:
+        """Index direct children of one folder only; None means Drive root."""
         account = self.database.get_account(account_id)
         if account is None:
             raise DriveSyncError(f"Unknown account ID: {account_id}")
 
-        credentials = self._get_credentials(account)
+        if parent_id is None:
+            query = "'root' in parents and trashed = false"
+        else:
+            escaped_parent = parent_id.replace("\\", "\\\\").replace("'", "\\'")
+            query = f"'{escaped_parent}' in parents and trashed = false"
 
         try:
-            service = build(
-                "drive",
-                "v3",
-                credentials=credentials,
-                cache_discovery=False,
-            )
+            return self._sync_query(account, query, root_parent=parent_id is None)
+        except (HttpError, GoogleAuthError, OSError, ValueError, TypeError) as exc:
+            raise DriveSyncError(
+                f"Google Drive folder metadata synchronization failed for {account.email}: {exc}"
+            ) from exc
 
-            page_token = None
-            processed = 0
+    def sync_account(self, account_id: str) -> int:
+        """Fetch all accessible file metadata pages for the explicit full-sync command."""
+        account = self.database.get_account(account_id)
+        if account is None:
+            raise DriveSyncError(f"Unknown account ID: {account_id}")
 
-            while True:
-                response = (
-                    service.files()
-                    .list(
-                        pageSize=100,
-                        pageToken=page_token,
-                        orderBy="name",
-                        fields=(
-                            "nextPageToken,"
-                            "files(id,name,mimeType,size,modifiedTime,parents,trashed)"
-                        ),
-                        includeItemsFromAllDrives=True,
-                        supportsAllDrives=True,
-                    )
-                    .execute()
-                )
-
-                for item in response.get("files", []):
-                    file_id = item.get("id")
-                    name = item.get("name")
-                    mime_type = item.get("mimeType")
-
-                    if not all(
-                        isinstance(value, str) and value for value in (file_id, name, mime_type)
-                    ):
-                        continue
-
-                    raw_size = item.get("size")
-                    try:
-                        size_bytes = int(raw_size) if raw_size is not None else None
-                    except (TypeError, ValueError):
-                        size_bytes = None
-
-                    parents = item.get("parents") or []
-                    parent_id = parents[0] if parents else None
-
-                    self.file_index.upsert(
-                        IndexedFile(
-                            account_id=account.account_id,
-                            file_id=file_id,
-                            name=name,
-                            mime_type=mime_type,
-                            parent_id=parent_id,
-                            size_bytes=size_bytes,
-                            modified_time=item.get("modifiedTime"),
-                            trashed=bool(item.get("trashed", False)),
-                        )
-                    )
-                    processed += 1
-
-                page_token = response.get("nextPageToken")
-                if not page_token:
-                    break
-
-            return processed
-
-        except (HttpError, GoogleAuthError, OSError, ValueError) as exc:
+        try:
+            return self._sync_query(account, query=None)
+        except (HttpError, GoogleAuthError, OSError, ValueError, TypeError) as exc:
             raise DriveSyncError(
                 f"Google Drive synchronization failed for {account.email}: {exc}"
             ) from exc

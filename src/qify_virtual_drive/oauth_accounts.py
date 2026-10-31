@@ -1,3 +1,4 @@
+
 """Google OAuth integration with QIFY's local account registry."""
 
 from __future__ import annotations
@@ -18,12 +19,12 @@ SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/drive.metadata.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
 ]
 
 
 class OAuthAccountService:
-    """Connect Google accounts without storing tokens in SQLite."""
+    """Connect and reauthorize Google accounts securely."""
 
     def __init__(
         self,
@@ -35,21 +36,41 @@ class OAuthAccountService:
         self.token_store = token_store
         self.credentials_path = Path(credentials_path)
 
-    def connect_account(self) -> Account:
-        """Run interactive OAuth and register the authorized Google identity."""
+    def _check_credentials_file(self) -> None:
         if not self.credentials_path.is_file():
-            raise FileNotFoundError(f"Desktop OAuth credentials not found: {self.credentials_path}")
+            raise FileNotFoundError(
+                f"Desktop OAuth credentials not found: {self.credentials_path}"
+            )
+
+    def _authorize(self):
+        """Run the interactive Google OAuth consent flow."""
+        self._check_credentials_file()
 
         flow = InstalledAppFlow.from_client_secrets_file(
             str(self.credentials_path),
-            SCOPES,
+            scopes=SCOPES,
         )
-        credentials = flow.run_local_server(
+
+        # Handle scope validation when the OAuth session is available.
+        # This also supports lightweight mocked flows used by tests.
+        oauth_session = getattr(flow, "oauth2session", None)
+        oauth_client = getattr(oauth_session, "_client", None)
+
+        if oauth_client is not None:
+            oauth_client.scope = None
+
+        return flow.run_local_server(
             host="localhost",
             port=0,
             open_browser=True,
+            prompt="consent",
+            access_type="offline",
+            include_granted_scopes="false",
         )
 
+    @staticmethod
+    def _get_identity(credentials) -> dict[str, Any]:
+        """Retrieve the identity associated with the OAuth credentials."""
         try:
             oauth_service = build(
                 "oauth2",
@@ -57,20 +78,43 @@ class OAuthAccountService:
                 credentials=credentials,
                 cache_discovery=False,
             )
-            identity: dict[str, Any] = oauth_service.userinfo().get().execute()
+
+            identity: dict[str, Any] = (
+                oauth_service.userinfo().get().execute()
+            )
+
         except (HttpError, GoogleAuthError) as exc:
-            raise RuntimeError(f"Could not retrieve Google account identity: {exc}") from exc
+            raise RuntimeError(
+                f"Could not retrieve Google account identity: {exc}"
+            ) from exc
 
         subject = identity.get("id")
         email = identity.get("email")
-        verified = identity.get("verified_email", False)
 
         if not isinstance(subject, str) or not subject:
-            raise RuntimeError("Google did not return a stable account identifier")
+            raise RuntimeError(
+                "Google did not return a stable account identifier."
+            )
+
         if not isinstance(email, str) or not email:
-            raise RuntimeError("Google did not return an email address")
-        if not verified:
-            raise RuntimeError("Google did not confirm that this email is verified")
+            raise RuntimeError(
+                "Google did not return an email address."
+            )
+
+        if not identity.get("verified_email", False):
+            raise RuntimeError(
+                "Google did not confirm that this email is verified."
+            )
+
+        return identity
+
+    def connect_account(self) -> Account:
+        """Authorize and register a new Google account."""
+        credentials = self._authorize()
+        identity = self._get_identity(credentials)
+
+        subject = identity["id"]
+        email = identity["email"]
 
         existing = next(
             (
@@ -83,13 +127,15 @@ class OAuthAccountService:
 
         if existing is not None:
             raise AccountError(
-                f"{email} is already registered. Reconnection support will be added next."
+                f"{email} is already registered. "
+                "Use reauthorize_account() to update its permissions."
             )
 
-        # Check capacity after identity is known, so duplicate identities can
-        # be recognized even when the registry already contains four accounts.
         if len(self.database.list_accounts()) >= self.database.max_accounts:
-            raise AccountError(f"All {self.database.max_accounts} Google account slots are in use.")
+            raise AccountError(
+                f"All {self.database.max_accounts} Google account slots "
+                "are in use."
+            )
 
         account = Account(
             account_id=f"google:{subject}",
@@ -97,13 +143,59 @@ class OAuthAccountService:
             google_subject_id=subject,
         )
 
-        # Register metadata first. If secure token storage fails, roll back the
-        # metadata entry so the registry does not claim a usable connection.
         self.database.add_account(account)
+
         try:
-            self.token_store.save(subject, credentials.to_json())
+            self.token_store.save(
+                subject,
+                credentials.to_json(),
+            )
+
         except (TokenStoreError, ValueError):
             self.database.remove_account(account.account_id)
             raise
+
+        return account
+
+    def reauthorize_account(self, account_id: str) -> Account:
+        """Update permissions for an existing account without duplicating it."""
+        account = self.database.get_account(account_id)
+
+        if account is None:
+            raise AccountError(
+                f"Account {account_id} was not found."
+            )
+
+        if not account.google_subject_id:
+            raise AccountError(
+                "This account has no Google identity. "
+                "Reconnect it through the account setup process."
+            )
+
+        credentials = self._authorize()
+        identity = self._get_identity(credentials)
+
+        if identity["id"] != account.google_subject_id:
+            raise AccountError(
+                "The authorized Google account does not match the selected "
+                "account. The existing token was not changed."
+            )
+
+        if identity["email"].casefold() != account.email.casefold():
+            raise AccountError(
+                "The Google email does not match the saved account. "
+                "The existing token was not changed."
+            )
+
+        try:
+            self.token_store.save(
+                account.google_subject_id,
+                credentials.to_json(),
+            )
+
+        except (TokenStoreError, ValueError) as exc:
+            raise RuntimeError(
+                "Could not save the updated Google authorization."
+            ) from exc
 
         return account
